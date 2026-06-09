@@ -1,256 +1,570 @@
-import { useState, useRef } from "react";
-
-const WEBHOOK_URL = "https://hook.eu1.make.com/irj5wbte6tl8x8v4lr0vzoyz7gb4bj57";
-
-export default function PitchGenerator() {
-  const [profile, setProfile] = useState("");
-  const [jobDesc, setJobDesc] = useState("");
-  const [pitch, setPitch] = useState("");
-  const [loading, setLoading] = useState(false);
-  const [copied, setCopied] = useState(false);
-  const [error, setError] = useState("");
-  const [charCount, setCharCount] = useState(0);
-  const pitchRef = useRef(null);
-
-  const wordCount = pitch.trim() ? pitch.trim().split(/\s+/).length : 0;
-
-  async function generatePitch() {
-    if (!profile.trim() || !jobDesc.trim()) {
-      setError("Please fill in both fields before generating.");
-      return;
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>PitchForge — AI Freelance Pitch Generator</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Serif+Display:ital@0;1&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet" />
+  <style>
+    :root {
+      --bg: #0f0d0a;
+      --amber: #f4a04a;
+      --amber-dark: #c96f1e;
+      --text: #f0ece4;
+      --text-muted: rgba(240,236,228,0.45);
+      --text-dim: rgba(240,236,228,0.3);
+      --border: rgba(255,255,255,0.08);
+      --surface: rgba(255,255,255,0.04);
     }
-    setError("");
-    setLoading(true);
-    setPitch("");
 
-    try {
-      const response = await fetch(WEBHOOK_URL, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          profile: profile.trim(),
-          jobDescription: jobDesc.trim(),
-        }),
-      });
+    * { box-sizing: border-box; margin: 0; padding: 0; }
 
-      if (!response.ok) {
-        throw new Error(`Webhook returned status ${response.status}`);
-      }
-
-      const contentType = response.headers.get("content-type") || "";
-      let result = "";
-
-      if (contentType.includes("application/json")) {
-        const data = await response.json();
-        result =
-          data.pitch ||
-          data.output ||
-          data.result ||
-          data.text ||
-          data.message ||
-          (typeof data === "string" ? data : JSON.stringify(data));
-      } else {
-        result = await response.text();
-      }
-
-      if (!result || result.trim() === "") {
-        throw new Error("Webhook returned an empty response.");
-      }
-
-      setPitch(result.trim());
-    } catch (err) {
-      setError(
-        err.message.includes("Failed to fetch")
-          ? "Could not reach the webhook. Check your Make.com scenario is active."
-          : `Error: ${err.message}`
-      );
-    } finally {
-      setLoading(false);
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: 'DM Sans', sans-serif;
+      min-height: 100vh;
+      overflow-x: hidden;
     }
-  }
 
-  async function copyToClipboard() {
-    if (!pitch) return;
-    await navigator.clipboard.writeText(pitch);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
-  }
+    /* Ambient blobs */
+    .blob {
+      position: fixed;
+      border-radius: 50%;
+      pointer-events: none;
+      z-index: 0;
+    }
+    .blob-1 {
+      top: -120px; right: -80px;
+      width: 500px; height: 500px;
+      background: radial-gradient(circle, rgba(244,160,74,0.13) 0%, transparent 70%);
+    }
+    .blob-2 {
+      bottom: -100px; left: -60px;
+      width: 400px; height: 400px;
+      background: radial-gradient(circle, rgba(180,120,60,0.08) 0%, transparent 70%);
+    }
 
-  return (
-    <div style={styles.root}>
-      <div style={styles.blob1} />
-      <div style={styles.blob2} />
+    /* Header */
+    header {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      padding: 24px 48px;
+      border-bottom: 1px solid rgba(255,255,255,0.06);
+      position: relative;
+      z-index: 10;
+    }
+    .logo-mark {
+      width: 40px; height: 40px;
+      border-radius: 10px;
+      background: linear-gradient(135deg, #f4a04a, #c96f1e);
+      display: flex; align-items: center; justify-content: center;
+      font-size: 18px; color: #fff; flex-shrink: 0;
+    }
+    .logo-text {
+      font-family: 'DM Serif Display', serif;
+      font-size: 22px;
+      color: var(--text);
+      letter-spacing: -0.3px;
+      line-height: 1;
+    }
+    .logo-sub {
+      font-size: 12px;
+      color: var(--text-muted);
+      display: block;
+      margin-top: 3px;
+    }
+    .badge {
+      margin-left: auto;
+      padding: 4px 12px;
+      border-radius: 20px;
+      border: 1px solid rgba(244,160,74,0.4);
+      color: var(--amber);
+      font-size: 11px;
+      font-weight: 600;
+      letter-spacing: 1px;
+      text-transform: uppercase;
+    }
 
-      <header style={styles.header}>
-        <div style={styles.logoMark}>✦</div>
-        <div>
-          <h1 style={styles.logoText}>PitchForge</h1>
-          <span style={styles.tagline}>AI-powered freelance pitches in seconds</span>
-        </div>
-        <div style={styles.badge}>Beta</div>
-      </header>
+    /* Main grid */
+    main {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 32px;
+      max-width: 1200px;
+      margin: 48px auto 0;
+      padding: 0 48px 60px;
+      position: relative;
+      z-index: 5;
+    }
 
-      <main style={styles.main}>
-        <section style={styles.leftPanel}>
-          <div style={styles.sectionLabel}>
-            <span style={styles.stepDot}>01</span>
-            Your Profile
-          </div>
+    /* Section labels */
+    .section-label {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      font-size: 11px;
+      font-weight: 600;
+      letter-spacing: 1.5px;
+      text-transform: uppercase;
+      color: rgba(240,236,228,0.5);
+      margin-bottom: 12px;
+    }
+    .step-dot {
+      font-family: 'DM Serif Display', serif;
+      font-size: 13px;
+      color: var(--amber);
+      font-style: italic;
+    }
 
-          <div style={styles.fieldGroup}>
-            <label style={styles.label}>Skills & Experience</label>
-            <input
-              style={styles.input}
-              type="text"
-              placeholder="e.g. React developer, 4 yrs exp, built SaaS tools, strong UI/UX..."
-              value={profile}
-              onChange={(e) => setProfile(e.target.value)}
-              onFocus={(e) => (e.target.style.borderColor = "#f4a04a")}
-              onBlur={(e) => (e.target.style.borderColor = "rgba(255,255,255,0.1)")}
-            />
-          </div>
+    /* Fields */
+    .field-group {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      margin-bottom: 20px;
+    }
+    label {
+      font-size: 13px;
+      font-weight: 500;
+      color: rgba(240,236,228,0.7);
+    }
+    input, textarea {
+      background: var(--surface);
+      border: 1px solid rgba(255,255,255,0.1);
+      border-radius: 10px;
+      padding: 13px 16px;
+      color: var(--text);
+      font-size: 14px;
+      font-family: 'DM Sans', sans-serif;
+      outline: none;
+      transition: border-color 0.2s;
+      width: 100%;
+    }
+    input:focus, textarea:focus {
+      border-color: var(--amber);
+    }
+    textarea {
+      min-height: 200px;
+      resize: vertical;
+      line-height: 1.6;
+    }
+    input::placeholder, textarea::placeholder {
+      color: rgba(240,236,228,0.25);
+    }
+    .char-count {
+      font-size: 11px;
+      color: var(--text-dim);
+      text-align: right;
+    }
 
-          <div style={styles.sectionLabel}>
-            <span style={styles.stepDot}>02</span>
-            Job Description
-          </div>
+    /* Error */
+    .error-box {
+      background: rgba(220,70,70,0.1);
+      border: 1px solid rgba(220,70,70,0.3);
+      border-radius: 8px;
+      padding: 10px 14px;
+      font-size: 13px;
+      color: #ff8080;
+      margin-bottom: 16px;
+      display: none;
+    }
+    .error-box.visible { display: block; }
 
-          <div style={styles.fieldGroup}>
-            <label style={styles.label}>Paste the job post</label>
-            <textarea
-              style={styles.textarea}
-              placeholder="Paste the full job description here. The more detail, the better the pitch..."
-              value={jobDesc}
-              onChange={(e) => {
-                setJobDesc(e.target.value);
-                setCharCount(e.target.value.length);
-              }}
-              onFocus={(e) => (e.target.style.borderColor = "#f4a04a")}
-              onBlur={(e) => (e.target.style.borderColor = "rgba(255,255,255,0.1)")}
-            />
-            <div style={styles.charCount}>{charCount} characters</div>
-          </div>
+    /* Submit button */
+    .submit-btn {
+      background: linear-gradient(135deg, #f4a04a 0%, #c96f1e 100%);
+      border: none;
+      border-radius: 12px;
+      padding: 16px 28px;
+      color: #fff;
+      font-size: 15px;
+      font-weight: 600;
+      font-family: 'DM Sans', sans-serif;
+      cursor: pointer;
+      width: 100%;
+      letter-spacing: 0.2px;
+      transition: transform 0.2s, box-shadow 0.2s, opacity 0.2s;
+      box-shadow: 0 4px 24px rgba(244,160,74,0.25);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 10px;
+    }
+    .submit-btn:hover:not(:disabled) {
+      transform: translateY(-2px);
+      box-shadow: 0 8px 32px rgba(244,160,74,0.35);
+    }
+    .submit-btn:disabled {
+      opacity: 0.7;
+      cursor: not-allowed;
+    }
+    .hint {
+      font-size: 11px;
+      color: var(--text-dim);
+      text-align: center;
+      letter-spacing: 0.3px;
+      margin-top: 12px;
+    }
 
-          {error && <div style={styles.errorBox}>⚠ {error}</div>}
+    /* Spinner */
+    .spinner {
+      width: 16px; height: 16px;
+      border: 2px solid rgba(255,255,255,0.3);
+      border-top-color: #fff;
+      border-radius: 50%;
+      animation: spin 0.7s linear infinite;
+      flex-shrink: 0;
+    }
 
-          <button
-            style={{ ...styles.submitBtn, ...(loading ? styles.submitBtnLoading : {}) }}
-            onClick={generatePitch}
-            disabled={loading}
-            onMouseEnter={(e) => { if (!loading) e.target.style.transform = "translateY(-2px)"; }}
-            onMouseLeave={(e) => { e.target.style.transform = "translateY(0)"; }}
-          >
-            {loading ? (
-              <span style={styles.spinnerRow}>
-                <span style={styles.spinner} />
-                Crafting your pitch...
-              </span>
-            ) : <>✦ Generate Pitch</>}
-          </button>
+    /* Right panel */
+    .output-header {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 12px;
+      margin-bottom: 16px;
+    }
+    .word-badge {
+      display: inline-block;
+      padding: 2px 10px;
+      border-radius: 20px;
+      background: rgba(244,160,74,0.12);
+      border: 1px solid rgba(244,160,74,0.2);
+      color: var(--amber);
+      font-size: 11px;
+      font-weight: 600;
+      margin-top: 4px;
+      animation: fadeIn 0.3s ease;
+    }
+    .copy-btn {
+      padding: 8px 20px;
+      border-radius: 8px;
+      border: 1px solid rgba(255,255,255,0.15);
+      background: rgba(255,255,255,0.05);
+      color: rgba(240,236,228,0.8);
+      font-size: 13px;
+      font-weight: 500;
+      font-family: 'DM Sans', sans-serif;
+      cursor: pointer;
+      transition: all 0.2s;
+      flex-shrink: 0;
+    }
+    .copy-btn:disabled {
+      opacity: 0.3;
+      cursor: not-allowed;
+    }
+    .copy-btn.success {
+      background: rgba(72,187,120,0.15);
+      border-color: rgba(72,187,120,0.4);
+      color: #68d391;
+    }
 
-          <p style={styles.hint}>Powered by Make.com · Results in ~5 seconds</p>
-        </section>
+    /* Pitch card */
+    .pitch-card {
+      background: rgba(255,255,255,0.03);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      padding: 28px;
+      min-height: 320px;
+      position: relative;
+    }
 
-        <section style={styles.rightPanel}>
-          <div style={styles.outputHeader}>
-            <div>
-              <div style={{ ...styles.sectionLabel, marginBottom: 4 }}>
-                <span style={styles.stepDot}>03</span>
-                Generated Pitch
-              </div>
-              {pitch && <span style={styles.wordBadge}>{wordCount} words</span>}
-            </div>
-            <button
-              style={{
-                ...styles.copyBtn,
-                ...(copied ? styles.copyBtnSuccess : {}),
-                ...(!pitch ? styles.copyBtnDisabled : {}),
-              }}
-              onClick={copyToClipboard}
-              disabled={!pitch}
-            >
-              {copied ? "✓ Copied!" : "Copy"}
-            </button>
-          </div>
+    /* Empty state */
+    .empty-state {
+      position: absolute;
+      inset: 0;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 16px;
+      padding: 40px;
+      text-align: center;
+    }
+    .empty-icon {
+      font-size: 32px;
+      color: rgba(244,160,74,0.2);
+      font-family: 'DM Serif Display', serif;
+    }
+    .empty-text {
+      font-size: 14px;
+      color: var(--text-dim);
+      line-height: 1.7;
+      max-width: 280px;
+    }
 
-          <div style={styles.pitchCard} ref={pitchRef}>
-            {loading && !pitch ? (
-              <div style={styles.skeletonWrap}>
-                {[100, 90, 95, 70, 85, 60, 80].map((w, i) => (
-                  <div key={i} style={{ ...styles.skeletonLine, width: `${w}%`, animationDelay: `${i * 0.1}s` }} />
-                ))}
-              </div>
-            ) : pitch ? (
-              <p style={styles.pitchText}>{pitch}</p>
-            ) : (
-              <div style={styles.emptyState}>
-                <div style={styles.emptyIcon}>✦</div>
-                <p style={styles.emptyText}>
-                  Your tailored pitch will appear here once you fill in your profile and job description.
-                </p>
-              </div>
-            )}
-          </div>
+    /* Skeleton */
+    .skeleton-wrap {
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+      padding: 4px 0;
+    }
+    .skeleton-line {
+      height: 14px;
+      border-radius: 6px;
+      background: rgba(255,255,255,0.07);
+      animation: pulse 1.4s ease infinite;
+    }
 
-          {pitch && (
-            <div style={styles.tipRow}>
-              <span style={styles.tipIcon}>💡</span>
-              <span style={styles.tipText}>Pro tip: Personalize the opening line before sending for best results.</span>
-            </div>
-          )}
-        </section>
-      </main>
+    /* Pitch text */
+    .pitch-text {
+      font-size: 15px;
+      line-height: 1.8;
+      color: var(--text);
+      font-weight: 300;
+      white-space: pre-wrap;
+      animation: fadeIn 0.4s ease;
+    }
 
-      <style>{`
-        @import url('https://fonts.googleapis.com/css2?family=DM+Serif+Display:ital@0;1&family=DM+Sans:wght@300;400;500;600&display=swap');
-        * { box-sizing: border-box; margin: 0; padding: 0; }
-        body { background: #0f0d0a; }
-        @keyframes pulse-skeleton { 0%, 100% { opacity: 0.3; } 50% { opacity: 0.7; } }
-        @keyframes spin { to { transform: rotate(360deg); } }
-        @keyframes fadeIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
-      `}</style>
+    /* Tip row */
+    .tip-row {
+      display: flex;
+      align-items: flex-start;
+      gap: 8px;
+      padding: 12px 16px;
+      background: rgba(244,160,74,0.05);
+      border: 1px solid rgba(244,160,74,0.1);
+      border-radius: 10px;
+      margin-top: 16px;
+      animation: fadeIn 0.4s ease;
+    }
+    .tip-text {
+      font-size: 12px;
+      color: rgba(240,236,228,0.5);
+      line-height: 1.5;
+    }
+
+    /* Keyframes */
+    @keyframes spin { to { transform: rotate(360deg); } }
+    @keyframes pulse {
+      0%, 100% { opacity: 0.3; }
+      50% { opacity: 0.7; }
+    }
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translateY(8px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+
+    /* Responsive */
+    @media (max-width: 768px) {
+      header { padding: 20px 24px; }
+      main { grid-template-columns: 1fr; padding: 0 24px 48px; margin-top: 32px; }
+    }
+  </style>
+</head>
+<body>
+
+  <div class="blob blob-1"></div>
+  <div class="blob blob-2"></div>
+
+  <!-- Header -->
+  <header>
+    <div class="logo-mark">✦</div>
+    <div>
+      <div class="logo-text">PitchForge</div>
+      <span class="logo-sub">AI-powered freelance pitches in seconds</span>
     </div>
-  );
-}
+    <div class="badge">Beta</div>
+  </header>
 
-const styles = {
-  root: { minHeight: "100vh", background: "#0f0d0a", fontFamily: "'DM Sans', sans-serif", color: "#f0ece4", position: "relative", overflow: "hidden", padding: "0 0 60px" },
-  blob1: { position: "fixed", top: "-120px", right: "-80px", width: "500px", height: "500px", borderRadius: "50%", background: "radial-gradient(circle, rgba(244,160,74,0.12) 0%, transparent 70%)", pointerEvents: "none" },
-  blob2: { position: "fixed", bottom: "-100px", left: "-60px", width: "400px", height: "400px", borderRadius: "50%", background: "radial-gradient(circle, rgba(180,120,60,0.08) 0%, transparent 70%)", pointerEvents: "none" },
-  header: { display: "flex", alignItems: "center", gap: "14px", padding: "28px 48px", borderBottom: "1px solid rgba(255,255,255,0.06)", backdropFilter: "blur(10px)", position: "relative", zIndex: 10 },
-  logoMark: { width: "40px", height: "40px", borderRadius: "10px", background: "linear-gradient(135deg, #f4a04a, #c96f1e)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: "18px", color: "#fff", fontWeight: "bold", flexShrink: 0 },
-  logoText: { fontFamily: "'DM Serif Display', serif", fontSize: "22px", color: "#f0ece4", letterSpacing: "-0.3px", lineHeight: 1 },
-  tagline: { fontSize: "12px", color: "rgba(240,236,228,0.45)", letterSpacing: "0.2px", display: "block", marginTop: "3px" },
-  badge: { marginLeft: "auto", padding: "4px 12px", borderRadius: "20px", border: "1px solid rgba(244,160,74,0.4)", color: "#f4a04a", fontSize: "11px", fontWeight: "600", letterSpacing: "1px", textTransform: "uppercase" },
-  main: { display: "grid", gridTemplateColumns: "1fr 1fr", gap: "32px", maxWidth: "1200px", margin: "48px auto 0", padding: "0 48px", position: "relative", zIndex: 5 },
-  leftPanel: { display: "flex", flexDirection: "column", gap: "20px" },
-  rightPanel: { display: "flex", flexDirection: "column", gap: "16px" },
-  sectionLabel: { display: "flex", alignItems: "center", gap: "10px", fontSize: "11px", fontWeight: "600", letterSpacing: "1.5px", textTransform: "uppercase", color: "rgba(240,236,228,0.5)", marginBottom: "10px" },
-  stepDot: { fontFamily: "'DM Serif Display', serif", fontSize: "13px", color: "#f4a04a", fontStyle: "italic" },
-  fieldGroup: { display: "flex", flexDirection: "column", gap: "8px" },
-  label: { fontSize: "13px", fontWeight: "500", color: "rgba(240,236,228,0.7)" },
-  input: { background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.1)", borderRadius: "10px", padding: "13px 16px", color: "#f0ece4", fontSize: "14px", fontFamily: "'DM Sans', sans-serif", outline: "none", transition: "border-color 0.2s", width: "100%" },
-  textarea: { background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.1)", borderRadius: "10px", padding: "14px 16px", color: "#f0ece4", fontSize: "14px", fontFamily: "'DM Sans', sans-serif", outline: "none", transition: "border-color 0.2s", width: "100%", minHeight: "200px", resize: "vertical", lineHeight: "1.6" },
-  charCount: { fontSize: "11px", color: "rgba(240,236,228,0.3)", textAlign: "right" },
-  errorBox: { background: "rgba(220,70,70,0.1)", border: "1px solid rgba(220,70,70,0.3)", borderRadius: "8px", padding: "10px 14px", fontSize: "13px", color: "#ff8080" },
-  submitBtn: { background: "linear-gradient(135deg, #f4a04a 0%, #c96f1e 100%)", border: "none", borderRadius: "12px", padding: "16px 28px", color: "#fff", fontSize: "15px", fontWeight: "600", fontFamily: "'DM Sans', sans-serif", cursor: "pointer", letterSpacing: "0.2px", transition: "transform 0.2s, box-shadow 0.2s", boxShadow: "0 4px 24px rgba(244,160,74,0.25)", width: "100%" },
-  submitBtnLoading: { opacity: 0.7, cursor: "not-allowed", transform: "none" },
-  spinnerRow: { display: "flex", alignItems: "center", justifyContent: "center", gap: "10px" },
-  spinner: { width: "16px", height: "16px", border: "2px solid rgba(255,255,255,0.3)", borderTopColor: "#fff", borderRadius: "50%", display: "inline-block", animation: "spin 0.7s linear infinite" },
-  hint: { fontSize: "11px", color: "rgba(240,236,228,0.3)", textAlign: "center", letterSpacing: "0.3px" },
-  outputHeader: { display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: "12px" },
-  wordBadge: { display: "inline-block", padding: "2px 10px", borderRadius: "20px", background: "rgba(244,160,74,0.12)", border: "1px solid rgba(244,160,74,0.2)", color: "#f4a04a", fontSize: "11px", fontWeight: "600", animation: "fadeIn 0.3s ease" },
-  copyBtn: { padding: "8px 20px", borderRadius: "8px", border: "1px solid rgba(255,255,255,0.15)", background: "rgba(255,255,255,0.05)", color: "rgba(240,236,228,0.8)", fontSize: "13px", fontWeight: "500", fontFamily: "'DM Sans', sans-serif", cursor: "pointer", transition: "all 0.2s", flexShrink: 0, marginTop: "4px" },
-  copyBtnSuccess: { background: "rgba(72,187,120,0.15)", borderColor: "rgba(72,187,120,0.4)", color: "#68d391" },
-  copyBtnDisabled: { opacity: 0.3, cursor: "not-allowed" },
-  pitchCard: { background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.08)", borderRadius: "16px", padding: "28px", minHeight: "300px", flex: 1, position: "relative", backdropFilter: "blur(4px)" },
-  pitchText: { fontSize: "15px", lineHeight: "1.8", color: "#f0ece4", fontFamily: "'DM Sans', sans-serif", fontWeight: "300", animation: "fadeIn 0.4s ease", whiteSpace: "pre-wrap" },
-  emptyState: { position: "absolute", inset: 0, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: "16px", padding: "40px", textAlign: "center" },
-  emptyIcon: { fontSize: "32px", color: "rgba(244,160,74,0.2)", fontFamily: "'DM Serif Display', serif" },
-  emptyText: { fontSize: "14px", color: "rgba(240,236,228,0.3)", lineHeight: "1.7", maxWidth: "280px" },
-  skeletonWrap: { display: "flex", flexDirection: "column", gap: "12px", padding: "4px 0" },
-  skeletonLine: { height: "14px", borderRadius: "6px", background: "rgba(255,255,255,0.07)", animation: "pulse-skeleton 1.4s ease infinite" },
-  tipRow: { display: "flex", alignItems: "flex-start", gap: "8px", padding: "12px 16px", background: "rgba(244,160,74,0.05)", border: "1px solid rgba(244,160,74,0.1)", borderRadius: "10px", animation: "fadeIn 0.4s ease" },
-  tipIcon: { fontSize: "14px", flexShrink: 0, marginTop: "1px" },
-  tipText: { fontSize: "12px", color: "rgba(240,236,228,0.5)", lineHeight: "1.5" },
-};
+  <!-- Main -->
+  <main>
+
+    <!-- LEFT PANEL -->
+    <section>
+      <div class="section-label">
+        <span class="step-dot">01</span> Your Profile
+      </div>
+      <div class="field-group">
+        <label for="profile">Skills & Experience</label>
+        <input
+          id="profile"
+          type="text"
+          placeholder="e.g. React developer, 4 yrs exp, built SaaS tools, strong UI/UX..."
+        />
+      </div>
+
+      <div class="section-label">
+        <span class="step-dot">02</span> Job Description
+      </div>
+      <div class="field-group">
+        <label for="jobDesc">Paste the job post</label>
+        <textarea
+          id="jobDesc"
+          placeholder="Paste the full job description here. The more detail, the better the pitch..."
+          oninput="document.getElementById('charCount').textContent = this.value.length + ' characters'"
+        ></textarea>
+        <div class="char-count" id="charCount">0 characters</div>
+      </div>
+
+      <div class="error-box" id="errorBox"></div>
+
+      <button class="submit-btn" id="generateBtn" onclick="generatePitch()">
+        ✦ Generate Pitch
+      </button>
+      <p class="hint">Powered by Make.com · Results in ~5 seconds</p>
+    </section>
+
+    <!-- RIGHT PANEL -->
+    <section>
+      <div class="output-header">
+        <div>
+          <div class="section-label" style="margin-bottom:4px">
+            <span class="step-dot">03</span> Generated Pitch
+          </div>
+          <span class="word-badge" id="wordBadge" style="display:none"></span>
+        </div>
+        <button class="copy-btn" id="copyBtn" onclick="copyPitch()" disabled>Copy</button>
+      </div>
+
+      <div class="pitch-card" id="pitchCard">
+        <div class="empty-state" id="emptyState">
+          <div class="empty-icon">✦</div>
+          <p class="empty-text">Your tailored pitch will appear here once you fill in your profile and job description.</p>
+        </div>
+        <div class="skeleton-wrap" id="skeleton" style="display:none">
+          <div class="skeleton-line" style="width:100%"></div>
+          <div class="skeleton-line" style="width:90%;animation-delay:.1s"></div>
+          <div class="skeleton-line" style="width:95%;animation-delay:.2s"></div>
+          <div class="skeleton-line" style="width:70%;animation-delay:.3s"></div>
+          <div class="skeleton-line" style="width:85%;animation-delay:.4s"></div>
+          <div class="skeleton-line" style="width:60%;animation-delay:.5s"></div>
+          <div class="skeleton-line" style="width:80%;animation-delay:.6s"></div>
+        </div>
+        <p class="pitch-text" id="pitchText" style="display:none"></p>
+      </div>
+
+      <div class="tip-row" id="tipRow" style="display:none">
+        <span style="font-size:14px;flex-shrink:0">💡</span>
+        <span class="tip-text">Pro tip: Personalize the opening line before sending for best results.</span>
+      </div>
+    </section>
+
+  </main>
+
+  <script>
+    const WEBHOOK_URL = "https://hook.eu1.make.com/irj5wbte6tl8x8v4lr0vzoyz7gb4bj57";
+
+    async function generatePitch() {
+      const profile = document.getElementById('profile').value.trim();
+      const jobDesc = document.getElementById('jobDesc').value.trim();
+      const errorBox = document.getElementById('errorBox');
+      const btn = document.getElementById('generateBtn');
+
+      // Validate
+      if (!profile || !jobDesc) {
+        errorBox.textContent = '⚠ Please fill in both fields before generating.';
+        errorBox.classList.add('visible');
+        return;
+      }
+      errorBox.classList.remove('visible');
+
+      // Set loading state
+      setLoading(true);
+      clearOutput();
+
+      try {
+        const response = await fetch(WEBHOOK_URL, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ profile, jobDescription: jobDesc }),
+        });
+
+        if (!response.ok) {
+          throw new Error('Webhook returned status ' + response.status);
+        }
+
+        const contentType = response.headers.get('content-type') || '';
+        let result = '';
+
+        if (contentType.includes('application/json')) {
+          const data = await response.json();
+          result = data.pitch || data.output || data.result || data.text || data.message
+            || (typeof data === 'string' ? data : JSON.stringify(data));
+        } else {
+          result = await response.text();
+        }
+
+        if (!result || result.trim() === '') {
+          throw new Error('Webhook returned an empty response.');
+        }
+
+        showPitch(result.trim());
+
+      } catch (err) {
+        const msg = err.message.includes('Failed to fetch')
+          ? 'Could not reach the webhook. Check your Make.com scenario is active.'
+          : 'Error: ' + err.message;
+        errorBox.textContent = '⚠ ' + msg;
+        errorBox.classList.add('visible');
+        clearOutput();
+      } finally {
+        setLoading(false);
+      }
+    }
+
+    function setLoading(on) {
+      const btn = document.getElementById('generateBtn');
+      const skeleton = document.getElementById('skeleton');
+      const emptyState = document.getElementById('emptyState');
+
+      btn.disabled = on;
+      if (on) {
+        btn.innerHTML = '<span class="spinner"></span> Crafting your pitch...';
+        emptyState.style.display = 'none';
+        skeleton.style.display = 'flex';
+      } else {
+        btn.innerHTML = '✦ Generate Pitch';
+        skeleton.style.display = 'none';
+      }
+    }
+
+    function clearOutput() {
+      document.getElementById('pitchText').style.display = 'none';
+      document.getElementById('pitchText').textContent = '';
+      document.getElementById('wordBadge').style.display = 'none';
+      document.getElementById('tipRow').style.display = 'none';
+      document.getElementById('copyBtn').disabled = true;
+      document.getElementById('copyBtn').textContent = 'Copy';
+      document.getElementById('copyBtn').classList.remove('success');
+      document.getElementById('emptyState').style.display = '';
+    }
+
+    function showPitch(text) {
+      const pitchText = document.getElementById('pitchText');
+      const emptyState = document.getElementById('emptyState');
+      const wordBadge = document.getElementById('wordBadge');
+      const tipRow = document.getElementById('tipRow');
+      const copyBtn = document.getElementById('copyBtn');
+
+      emptyState.style.display = 'none';
+      pitchText.textContent = text;
+      pitchText.style.display = 'block';
+
+      const words = text.trim().split(/\s+/).length;
+      wordBadge.textContent = words + ' words';
+      wordBadge.style.display = 'inline-block';
+
+      tipRow.style.display = 'flex';
+      copyBtn.disabled = false;
+    }
+
+    async function copyPitch() {
+      const text = document.getElementById('pitchText').textContent;
+      if (!text) return;
+      await navigator.clipboard.writeText(text);
+      const btn = document.getElementById('copyBtn');
+      btn.textContent = '✓ Copied!';
+      btn.classList.add('success');
+      setTimeout(() => {
+        btn.textContent = 'Copy';
+        btn.classList.remove('success');
+      }, 2000);
+    }
+  </script>
+</body>
+</html>
